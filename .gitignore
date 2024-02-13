@@ -1,0 +1,14 @@
+# Default ignored files
+/shelf/
+/.idea/workspace.xml
+# Editor-based HTTP Client requests
+/httpRequests/
+.idea/
+.cache/
+dist/
+*.iml
+/node_modules/
+/.DS_Store
+/src/.DS_Store
+/src/assets/.DS_Store
+
