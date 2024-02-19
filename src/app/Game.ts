@@ -1,278 +1,201 @@
-import { images } from '../assets/loader';
-import * as PIXI from 'pixi.js';
-import Keyboard from 'pixi.js-keyboard';
+import { GameAssets } from '../assets/GameAssets.ts';
+import { Application, Sprite, Text, Ticker } from 'pixi.js';
 import { Timer } from 'eventemitter3-timer';
+import { TextureNames } from '../assets/textures';
+import { BaseItem } from '../items/BaseItem.ts';
+import { Ship } from '../items/Ship.ts';
+import Keyboard from 'pixi.js-keyboard';
+import { Bullet } from '../items/Bullet.ts';
+import { Asteroid } from '../items/Asteroid.ts';
+import { LeftBulletsText } from '../items/LeftBulletsText.ts';
+import { Explosion } from '../items/Explosion.ts';
 
+export const WIDTH = 1280;
 
 export class GameApp {
-  ticker: PIXI.Ticker;
-  app: PIXI.Application;
-  background: PIXI.Sprite;
-  asteroidTexture: PIXI.Texture;
+  ticker: Ticker | undefined;
+  app: Application;
   gameObjects: GameObjects = {
     startButton: null,
     ship: null,
     asteroids: [],
     bullets: [],
-    explosion: null,
+    explosion: [],
     leftBullets: null,
-    gameTimer: {
-      timerText: null,
-      gameTime: 60,
-    },
-    finalText: null,
+    gameTimer: new Text('', {fontFamily: 'Honk', fontSize: 40})
   };
 
   constructor(parent: HTMLElement, width: number, height: number) {
-    this.moveBullet = this.moveBullet.bind(this);
-    this.setup = this.setup.bind(this);
-    this.app = new PIXI.Application({width, height, backgroundColor: 0});
-    this.app.loader.add('background', images.space).load(() => {
-      this.background = new PIXI.Sprite(this.app.loader.resources.background.texture);
-    }).load(() => this.loadShip()).load(() => {
-      this.asteroidTexture = PIXI.Texture.from(images.asteroid);
-    }).load(() => {
-      const explosionTexture = PIXI.Texture.from(images.explosion);
-      this.gameObjects.explosion = new PIXI.Sprite(explosionTexture);
-    }).load(() => {
-      this.loadButton();
-    }).onComplete.add(this.setup)
-    parent.replaceChild(this.app.view, parent.lastElementChild);
+    this.app = new Application({width, height, backgroundColor: 0});
+    parent.replaceChild(this.app.view as unknown as Node, parent.lastElementChild as Node);
+    this.initGame();
   }
 
-  loadButton() {
-    const texture = PIXI.Texture.from(images.button);
-    const startButton = new PIXI.Sprite(texture);
-    const screen = this.app.screen;
+  initGame() {
+    GameAssets.loadAssets((progress: number) => {
+      if (progress === 1) {
+        this.startGame();
+      }
+    })
+  }
+
+  startGame() {
+    this.createScene();
+    this.ticker?.add(this.gameLoop.bind(this));
+    this.ticker?.start();
+  }
+
+  createScene() {
+    this.app.stage.addChild(Sprite.from(GameAssets.getTexture(TextureNames.Background1)));
+    this.gameObjects.ship = new Ship(this.app);
+    for (let i = 0; i < 10; i++) {
+      const asteroid = new Asteroid(this.app);
+      this.gameObjects.asteroids.push(asteroid);
+    }
+    this.gameObjects.leftBullets = new LeftBulletsText(this.app, String(this.gameObjects.ship.leftBullets))
+    this.ticker = new Ticker();
+    this.setupGameTimer();
+    this.setupButton();
+  };
+
+  restartGame() {
+    this.resetGameObjects();
+    this.ticker?.destroy();
+    this.startGame();
+  }
+
+  gameLoop(delta: number) {
+    const {ship, leftBullets} = this.gameObjects;
+    if (Keyboard.isKeyDown('ArrowLeft')) {
+      ship?.move(-(5 * delta))
+    }
+    if (Keyboard.isKeyDown('ArrowRight')) {
+      ship?.move(5 * delta)
+    }
+    if (Keyboard.isKeyPressed('Space') && ship?.isShootPossible()) {
+      const bullet = ship?.shoot();
+      if (bullet) {
+        this.gameObjects.bullets.push(bullet);
+        leftBullets?.updateText(String(ship?.leftBullets));
+      }
+    }
+    Keyboard.update();
+    this.updateGameObjects(delta);
+    this.checkCollisionsBetweenObjects();
+    this.checkEndGameCondition();
+  }
+
+  private updateGameObjects(delta: number) {
+    const {asteroids, explosion, bullets} = this.gameObjects;
+    asteroids.forEach(item => item.update(delta));
+    const updateExplosions = explosion.filter(e => !e.destroyed);
+    updateExplosions.forEach(item => item.update(delta));
+    this.gameObjects.explosion = updateExplosions;
+    const updateBullets = bullets.filter(b => !b.destroyed);
+    updateBullets.forEach(item => item.update());
+    this.gameObjects.bullets = updateBullets;
+  }
+
+  setupButton() {
+    const startButton = Sprite.from(GameAssets.getTexture(TextureNames.Button));
     startButton.anchor.set(0.5);
     startButton.width = 400;
     startButton.height = 250;
-    startButton.position.set(screen.width / 2, screen.height / 3 + startButton.height);
+    startButton.position.set(WIDTH / 2, WIDTH / 2.5);
+    startButton.cursor = 'pointer';
+    startButton.eventMode = 'static';
     startButton.addListener('click', () => {
-      this.resetGame()
+      this.restartGame();
     });
     this.gameObjects.startButton = startButton;
   }
 
-  loadShip() {
-    const texture = PIXI.Texture.from(images.cat);
-    const ship = new PIXI.Sprite(texture);
-    ship.height = 170;
-    ship.width = 170;
-    ship.anchor.set(0.5)
-    this.gameObjects.ship = ship;
-  }
-
-  setup() {
-    this.app.stage.addChild(this.background);
-    this.ticker = new PIXI.Ticker();
-    this.ticker.start();
-    this.setupShip();
-    this.setupAsteroids();
-    this.setupGameTimer();
-    this.setupBullets();
-  }
-
-  setupShip() {
-    const { ship, bullets} = this.gameObjects;
-    const width = this.app.screen.width;
-    ship.position.set(width / 2, 635);
-    this.app.stage.addChild(ship);
-    this.ticker.add((delta) => {
-      const speed = 5 * delta;
-      if (Keyboard.isKeyDown('ArrowLeft') && ship.x >= ship.width / 2) {
-        ship.x -= speed;
-      }
-      if (Keyboard.isKeyDown('ArrowRight') && ship.x <= width - ship.width / 2) {
-        ship.x += speed;
-      }
-      if (Keyboard.isKeyPressed('Space') && bullets.length > 0) {
-        this.shoot();
-      }
-      Keyboard.update();
-    });
-  }
-
-  setupAsteroids() {
-    const padding = 50;
-    for (let i = 0; i < 10; i++) {
-      const asteroid = new PIXI.Sprite(this.asteroidTexture);
-      asteroid.height = 100;
-      asteroid.width = 100;
-      asteroid.anchor.set(0.5);
-      asteroid.x = padding + Math.random() * (this.app.screen.width - padding * 2);
-      asteroid.y = padding + Math.random() * (this.gameObjects.ship.y - 300 - padding);
-      this.app.stage.addChild(asteroid);
-      this.ticker.add((delta) => {
-        asteroid.rotation += 0.05 * delta;
-      });
-      this.gameObjects.asteroids.push(asteroid);
+  showButton() {
+    const {startButton} = this.gameObjects;
+    const text = new Text('Restart', {fontFamily: 'Honk', fontSize: 50});
+    text.anchor.set(0.5);
+    if (startButton) {
+      text.position.set(startButton.x, startButton.y - text.height / 4)
+      this.app.stage.addChild(startButton);
+      this.app.stage.addChild(text);
     }
-  }
-
-  shoot() {
-    const { bullets, ship, leftBullets} = this.gameObjects;
-    const bullet = bullets.pop();
-    bullet.position.set(ship.x, ship.y);
-    const bulletTicker = () => {
-      this.moveBullet(bullet, bulletTicker);
-    };
-    this.ticker.add(bulletTicker);
-    this.app.stage.addChild(bullet);
-    leftBullets.text = bullets.length.toString();
-  };
-
-  setupBullets() {
-    for (let i = 0; i < 10; i++) {
-      const bullet = this.createBullet();
-      this.gameObjects.bullets.push(bullet);
-    }
-    this.leftBullets();
-  }
-
-  moveBullet(bullet: PIXI.Graphics, currentTicker: () => void) {
-    bullet.y -= 10;
-
-    const { bullets, asteroids } = this.gameObjects;
-    const asteroid = asteroids.find(asteroid => this.checkCollision(bullet, asteroid));
-    this.destroyAsteroid(asteroid);
-
-    if (bullet.y < 0 || asteroid) {
-      this.app.stage.removeChild(bullet);
-      this.ticker.remove(currentTicker);
-      this.gameObjects.bullets = bullets.filter(bul => bul !== bullet);
-      this.gameObjects.leftBullets.text = bullets.length.toString();
-      this.checkEndGameCondition();
-    }
-  }
-
-  destroyAsteroid(asteroid: PIXI.Sprite) {
-    if (asteroid) {
-      this.setupExplosion(asteroid.x, asteroid.y);
-      this.gameObjects.asteroids = this.gameObjects.asteroids.filter(ast => ast !== asteroid);
-      this.app.stage.removeChild(asteroid);
-    }
-  }
-
-  setupExplosion(x: number, y: number) {
-    const explosion = this.gameObjects.explosion;
-    explosion.height = 120;
-    explosion.width = 120;
-    explosion.position.set(x, y);
-    explosion.anchor.set(0.5);
-    this.ticker.add((delta) => {
-      explosion.rotation += delta * 5;
-    })
-    this.app.stage.addChild(explosion);
-    const timer = setTimeout(() => {
-      this.app.stage.removeChild(explosion);
-    }, 300);
-
-    explosion.once('removed', () => clearTimeout(timer));
   }
 
   setupGameTimer() {
-    const gameTimer = this.gameObjects.gameTimer;
-    gameTimer.timerText = new PIXI.Text('', { fontFamily: 'Honk', fontSize: 40 });
-    gameTimer.timerText.position.set(this.app.screen.width - 250, 50);
+    let gameTimer = this.gameObjects.gameTimer;
+    gameTimer.position.set(this.app.screen.width - 250, 50);
     const timer = new Timer(60000);
     timer.on('update', (time) => {
-      gameTimer.timerText.text = `Time left: ${60 - Math.floor(time / 1000)}`;
+      gameTimer.text = `Time left: ${60 - Math.floor(time / 1000)}`;
     });
     timer.on('end', () => {
       this.endGame(false);
     });
     timer.start();
-    this.ticker.add(() => timer.timerManager.update(this.ticker.elapsedMS));
-    this.app.stage.addChild(gameTimer.timerText);
+    this.ticker?.add(() => timer.timerManager?.update(this.ticker?.elapsedMS));
+    this.app.stage.addChild(gameTimer);
   }
 
   setupFinalText(text: string) {
-    const finalText = new PIXI.Text(text, {fontFamily: 'Honk', fontSize: 80});
+    const finalText = new Text(text, {fontFamily: 'Honk', fontSize: 80});
     finalText.anchor.set(0.5);
     finalText.position.set(this.app.screen.width / 2, this.app.screen.height / 2);
     this.app.stage.addChild(finalText);
-    this.gameObjects.finalText = finalText;
-  }
-
-  leftBullets() {
-    const bulletsContainer = new PIXI.Container();
-    const bullet = this.createBullet();
-    bulletsContainer.addChild(bullet);
-
-    const leftCount = new PIXI.Text(`${this.gameObjects.bullets.length}`, { fontFamily: 'Honk', fontSize: 50 });
-    leftCount.anchor.set(0.5);
-    leftCount.position.set(bullet.width * 2, bullet.height / 2);
-    bulletsContainer.position.set(50, 50);
-    bulletsContainer.addChild(leftCount);
-    this.gameObjects.leftBullets = leftCount;
-    this.app.stage.addChild(bulletsContainer);
   }
 
   endGame(isWin: boolean) {
     const text = isWin ? "YOU WIN :)" : "YOU LOSE :(";
     this.setupFinalText(text);
-    this.setupButton();
-    this.ticker.stop();
+    this.showButton();
+    this.ticker?.stop();
   }
 
-  setupButton() {
-    const { startButton} = this.gameObjects;
-    const text = new PIXI.Text('Restart', { fontFamily: 'Honk', fontSize: 50 });
-    text.anchor.set(0.5);
-    text.position.set(startButton.x, startButton.y - text.height / 4)
-    startButton.interactive = true;
-    startButton.buttonMode = true;
-    this.app.stage.addChild(startButton);
-    this.app.stage.addChild(text);
-    this.gameObjects.startButton = startButton;
-  }
-
-  createBullet() {
-    const bullet = new PIXI.Graphics();
-    bullet.beginFill(0xffffff);
-    bullet.drawCircle(50, 50, 50);
-    bullet.height = 30;
-    bullet.width = 30;
-    return bullet;
-  }
-
-  resetGame() {
-    this.ticker.destroy();
+  resetGameObjects() {
     this.app.stage.removeChildren();
-    this.setup();
+    this.gameObjects.asteroids = [];
+    this.gameObjects.bullets = [];
+    this.gameObjects.explosion = [];
   }
 
-  checkCollision(object1: PIXI.Graphics, object2: PIXI.Sprite) {
-    const bounds1 = object1.getBounds();
-    const bounds2 = object2.getBounds();
+  checkCollisionsBetweenObjects() {
+    this.gameObjects.asteroids.forEach(asteroid => {
+      this.gameObjects.bullets.forEach(bullet => {
+        if (this.checkCollision(asteroid, bullet)) {
+          this.gameObjects.asteroids = this.gameObjects.asteroids.filter(a => a !== asteroid);
+          this.gameObjects.bullets = this.gameObjects.bullets.filter(b => b !== bullet);
+          this.gameObjects.explosion.push(asteroid.destroy());
+          bullet.destroy();
+        }
+      })
+    });
+  }
+
+  checkCollision(object1: BaseItem, object2: BaseItem) {
+    const bounds1 = object1.bounds;
+    const bounds2 = object2.bounds;
 
     return bounds1.x < bounds2.x + bounds2.width && bounds1.x + bounds1.width > bounds2.x
       && bounds1.y < bounds2.y + bounds2.height && bounds1.y + bounds1.height > bounds2.y;
   }
 
   checkEndGameCondition() {
-    const { bullets, asteroids } = this.gameObjects;
+    const {ship, asteroids, bullets} = this.gameObjects;
     if (asteroids.length === 0) {
       this.endGame(true);
-    } else if (bullets.length === 0 && asteroids.length > 0 ) {
+      // create next level
+    } else if (!ship?.isShootPossible() && bullets.length === 0 && asteroids.length > 0) {
+      console.log("!!!!")
       this.endGame(false);
     }
   }
 }
 
 type GameObjects = {
-  startButton: PIXI.Sprite,
-  ship: PIXI.Sprite,
-  asteroids: PIXI.Sprite[],
-  bullets: PIXI.Graphics[],
-  explosion: PIXI.Sprite,
-  leftBullets: PIXI.Text,
-  gameTimer: TimerType,
-  finalText: PIXI.Text,
-}
-
-type TimerType = {
-  timerText: PIXI.Text,
-  gameTime: number,
+  startButton: Sprite | null,
+  ship: Ship | null,
+  asteroids: Asteroid[],
+  bullets: Bullet[],
+  explosion: Explosion[],
+  leftBullets: LeftBulletsText | null,
+  gameTimer: Text,
 }

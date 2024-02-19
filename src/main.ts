@@ -1,3 +1,3 @@
-import { GameApp } from "./app/Game";
+import { GameApp } from './app/Game';
 
-new GameApp(document.body,  1280, 720);
+new GameApp(document.body, 1280, 720);
