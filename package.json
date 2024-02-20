@@ -6,7 +6,7 @@
   "main": "main.ts",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "build": "tsc && vite --config vite.config.prod.ts build",
     "preview": "vite preview",
     "start": "npm run clean && vite --open '/'",
     "clean": "rimraf ./dist ./.cache",

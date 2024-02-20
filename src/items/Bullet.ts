@@ -3,8 +3,8 @@ import { BaseItem } from './BaseItem.ts';
 
 export class Bullet implements BaseItem {
 
-  private readonly bullet: Graphics;
-  private isDestroyed: boolean = false;
+  bullet: Graphics;
+  isDestroyed: boolean = false;
 
   constructor(private app: Application, x: number, y: number) {
     this.bullet = new Graphics();
@@ -17,7 +17,7 @@ export class Bullet implements BaseItem {
   }
 
   update() {
-    this.bullet.y -= 10;
+    this.bullet.y -= 15;
 
     if (this.bullet.y < 0) {
       this.destroy();

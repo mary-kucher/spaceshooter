@@ -3,11 +3,13 @@ import { GameAssets } from '../assets/GameAssets.ts';
 import { TextureNames } from '../assets/textures.ts';
 import { WIDTH } from '../app/Game.ts';
 import { Bullet } from './Bullet.ts';
+import { BaseItem } from './BaseItem.ts';
+import { Explosion } from './Explosion.ts';
 
-export class Ship {
-
-  private readonly sprite: Sprite;
-  private bulletsCounter: number = 10;
+export class Ship implements BaseItem {
+  sprite: Sprite;
+  bulletsCounter: number = 10;
+  isDestroyed: boolean = false;
 
   constructor(private app: Application) {
     this.sprite = Sprite.from(GameAssets.getTexture(TextureNames.Ship));
@@ -19,12 +21,11 @@ export class Ship {
   }
 
   shoot() {
-    let bullet;
     if (this.isShootPossible()) {
       this.bulletsCounter--;
-      bullet = new Bullet(this.app, this.sprite.x, this.sprite.y);
+      return new Bullet(this.app, this.sprite.x, this.sprite.y);
     }
-    return bullet;
+    return null;
   }
 
   move(speed: number) {
@@ -42,5 +43,19 @@ export class Ship {
 
   get leftBullets() {
     return this.bulletsCounter;
+  }
+
+  update() {
+    // not used
+  }
+
+  get bounds() {
+    return this.sprite.getBounds();
+  }
+
+  destroy() {
+    this.app.stage.removeChild(this.sprite);
+    this.isDestroyed = true;
+    return new Explosion(this.app, this.sprite.x, this.sprite.y)
   }
 }

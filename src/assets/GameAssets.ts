@@ -1,4 +1,4 @@
-import { Assets, ProgressCallback } from 'pixi.js'
+import { Assets } from 'pixi.js'
 import { TextureNames, appTextures } from './textures';
 
 export class GameAssets {
@@ -10,11 +10,11 @@ export class GameAssets {
     });
   }
 
-  static loadAssets(onProgress: ProgressCallback) {
-    const keys = Object.values(TextureNames).map(value => value);
-    Assets.load([...keys]).then(data => {
+  static loadAssets(onFinish: () => void) {
+    const keys = Object.values(TextureNames);
+    Assets.load(keys).then(data => {
       Object.entries(data).forEach(([key, value]) => this.textures.set(key, value));
-      onProgress(1)
+      onFinish();
     }).catch(console.error);
   }
 

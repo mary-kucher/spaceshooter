@@ -5,8 +5,8 @@ import { BaseItem } from './BaseItem.ts';
 
 export class Explosion implements BaseItem {
 
-  private readonly sprite: Sprite;
-  private isDestroyed: boolean = false;
+  sprite: Sprite;
+  isDestroyed: boolean = false;
 
   constructor(private app: Application, x: number, y: number) {
     this.sprite = Sprite.from(GameAssets.getTexture(TextureNames.Explosion));

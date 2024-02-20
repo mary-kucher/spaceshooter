@@ -6,8 +6,7 @@ import { BaseItem } from './BaseItem.ts';
 import { Explosion } from './Explosion.ts';
 
 export class Asteroid implements BaseItem {
-
-  private readonly sprite: Sprite;
+  sprite: Sprite;
 
   constructor(private app: Application) {
     const padding = 50;

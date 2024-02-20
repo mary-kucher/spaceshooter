@@ -1,8 +1,7 @@
 import { Application, Container, Graphics, Text } from 'pixi.js';
 
 export class LeftBulletsText {
-
-  private leftCount: Text;
+  leftCount: Text;
 
   constructor(private app: Application, text: string) {
     const bulletsContainer = new Container();
